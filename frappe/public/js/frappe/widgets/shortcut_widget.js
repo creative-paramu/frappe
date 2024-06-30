@@ -49,12 +49,7 @@ export default class ShortcutWidget extends Widget {
 			}
 
 			if (this.type == "URL") {
-				if (frappe.open_in_new_tab) {
-					window.open(this.url, "_blank");
-					frappe.open_in_new_tab = false;
-				} else {
-					window.location.href = this.url;
-				}
+				window.open(this.url, "_blank");
 				return;
 			}
 
@@ -71,8 +66,16 @@ export default class ShortcutWidget extends Widget {
 
 		this.widget.addClass("shortcut-widget-box");
 
+		// Make it tabbable
+		this.widget.attr({
+			role: "link",
+			tabindex: 0,
+			"aria-label": this.label,
+		});
+
 		let filters = frappe.utils.process_filter_expression(this.stats_filter);
-		if (this.type == "DocType" && filters) {
+
+		if (this.type == "DocType" && this.doc_view != "New" && filters) {
 			frappe.db
 				.count(this.link_to, {
 					filters: filters,

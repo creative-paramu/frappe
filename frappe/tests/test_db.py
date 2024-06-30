@@ -2,7 +2,6 @@
 # License: MIT. See LICENSE
 
 import datetime
-import inspect
 from math import ceil
 from random import choice
 from unittest.mock import patch
@@ -11,13 +10,14 @@ import frappe
 from frappe.core.utils import find
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
 from frappe.database import savepoint
-from frappe.database.database import Database, get_query_execution_timeout
+from frappe.database.database import get_query_execution_timeout
 from frappe.database.utils import FallBackDateTimeStr
 from frappe.query_builder import Field
 from frappe.query_builder.functions import Concat_ws
 from frappe.tests.test_query_builder import db_type_is, run_only_if
-from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, cint, now, random_string, set_request
+from frappe.tests.utils import FrappeTestCase, patch_hooks, timeout
+from frappe.utils import add_days, now, random_string, set_request
+from frappe.utils.data import now_datetime
 from frappe.utils.testutils import clear_custom_fields
 
 
@@ -80,9 +80,7 @@ class TestDB(FrappeTestCase):
 		)
 		self.assertIn(
 			"for update",
-			frappe.db.get_value(
-				"User", Field("name") == "Administrator", for_update=True, run=False
-			).lower(),
+			frappe.db.get_value("User", Field("name") == "Administrator", for_update=True, run=False).lower(),
 		)
 		user_doctype = frappe.qb.DocType("User")
 		self.assertEqual(
@@ -127,7 +125,7 @@ class TestDB(FrappeTestCase):
 			).lower(),
 		)
 		self.assertEqual(
-			frappe.db.sql("select email from tabUser where name='Administrator' order by modified DESC"),
+			frappe.db.sql("select email from tabUser where name='Administrator' order by creation DESC"),
 			frappe.db.get_values("User", filters=[["name", "=", "Administrator"]], fieldname="email"),
 		)
 
@@ -155,9 +153,7 @@ class TestDB(FrappeTestCase):
 			"Datetime": datetime.datetime.now(),
 			"Time": datetime.timedelta(hours=9, minutes=45, seconds=10),
 		}
-		test_inputs = [
-			{"fieldtype": fieldtype, "value": value} for fieldtype, value in values_dict.items()
-		]
+		test_inputs = [{"fieldtype": fieldtype, "value": value} for fieldtype, value in values_dict.items()]
 		for fieldtype in values_dict:
 			create_custom_field(
 				"Print Settings",
@@ -176,6 +172,13 @@ class TestDB(FrappeTestCase):
 
 		# teardown
 		clear_custom_fields("Print Settings")
+
+	def test_get_single_value_destructuring(self):
+		[[lang, date_format]] = frappe.db.get_values_from_single(
+			["language", "date_format"], None, "System Settings"
+		)
+		self.assertEqual(lang, frappe.db.get_single_value("System Settings", "language"))
+		self.assertEqual(date_format, frappe.db.get_single_value("System Settings", "date_format"))
 
 	def test_log_touched_tables(self):
 		frappe.flags.in_migrate = True
@@ -333,38 +336,40 @@ class TestDB(FrappeTestCase):
 		random_value = random_string(20)
 
 		# Testing read
+		self.assertEqual(next(iter(frappe.get_all("ToDo", fields=[random_field], limit=1)[0])), random_field)
 		self.assertEqual(
-			list(frappe.get_all("ToDo", fields=[random_field], limit=1)[0])[0], random_field
-		)
-		self.assertEqual(
-			list(frappe.get_all("ToDo", fields=[f"`{random_field}` as total"], limit=1)[0])[0], "total"
+			next(iter(frappe.get_all("ToDo", fields=[f"`{random_field}` as total"], limit=1)[0])), "total"
 		)
 
 		# Testing read for distinct and sql functions
 		self.assertEqual(
-			list(
-				frappe.get_all(
-					"ToDo",
-					fields=[f"`{random_field}` as total"],
-					distinct=True,
-					limit=1,
-				)[0]
-			)[0],
+			next(
+				iter(
+					frappe.get_all(
+						"ToDo",
+						fields=[f"`{random_field}` as total"],
+						distinct=True,
+						limit=1,
+					)[0]
+				)
+			),
 			"total",
 		)
 		self.assertEqual(
-			list(
-				frappe.get_all(
-					"ToDo",
-					fields=[f"`{random_field}`"],
-					distinct=True,
-					limit=1,
-				)[0]
-			)[0],
+			next(
+				iter(
+					frappe.get_all(
+						"ToDo",
+						fields=[f"`{random_field}`"],
+						distinct=True,
+						limit=1,
+					)[0]
+				)
+			),
 			random_field,
 		)
 		self.assertEqual(
-			list(frappe.get_all("ToDo", fields=[f"count(`{random_field}`)"], limit=1)[0])[0],
+			next(iter(frappe.get_all("ToDo", fields=[f"count(`{random_field}`)"], limit=1)[0])),
 			"count" if frappe.conf.db_type == "postgres" else f"count(`{random_field}`)",
 		)
 
@@ -432,7 +437,7 @@ class TestDB(FrappeTestCase):
 		frappe.db.MAX_WRITES_PER_TRANSACTION = 1
 		note = frappe.get_last_doc("ToDo")
 		note.description = "changed"
-		with self.assertRaises(frappe.TooManyWritesError) as tmw:
+		with self.assertRaises(frappe.TooManyWritesError):
 			note.save()
 
 		frappe.db.MAX_WRITES_PER_TRANSACTION = Database.MAX_WRITES_PER_TRANSACTION
@@ -454,6 +459,19 @@ class TestDB(FrappeTestCase):
 			note.name,
 		)
 		self.assertEqual(1, frappe.db.transaction_writes - writes)
+
+	def test_transactions_disabled_during_writes(self):
+		hook_name = f"{bad_hook.__module__}.{bad_hook.__name__}"
+		nested_hook_name = f"{bad_nested_hook.__module__}.{bad_nested_hook.__name__}"
+
+		with patch_hooks(
+			{"doc_events": {"*": {"before_validate": hook_name, "on_update": nested_hook_name}}}
+		):
+			note = frappe.new_doc("Note", title=frappe.generate_hash())
+			note.insert()
+		self.assertGreater(frappe.db.transaction_writes, 0)  # This would've reset for commit/rollback
+
+		self.assertFalse(frappe.db._disable_transaction_control)
 
 	def test_pk_collision_ignoring(self):
 		# note has `name` generated from title
@@ -486,6 +504,19 @@ class TestDB(FrappeTestCase):
 		self.assertEqual(filters["doctype"], dt)  # make sure that doctype was not removed from filters
 
 		self.assertEqual(frappe.db.exists(dt, [["name", "=", dn]]), dn)
+
+	def test_datetime_serialization(self):
+		dt = now_datetime()
+		dt = dt.replace(microsecond=0)
+		self.assertEqual(str(dt), str(frappe.db.sql("select %s", dt)[0][0]))
+
+		frappe.db.exists("User", {"creation": (">", dt)})
+		self.assertIn(str(dt), str(frappe.db.last_query))
+
+		before = now_datetime()
+		note = frappe.get_doc(doctype="Note", title=frappe.generate_hash(), content="something").insert()
+		after = now_datetime()
+		self.assertEqual(note.name, frappe.db.exists("Note", {"creation": ("between", (before, after))}))
 
 	def test_bulk_insert(self):
 		current_count = frappe.db.count("ToDo")
@@ -551,9 +582,7 @@ class TestDB(FrappeTestCase):
 			modify_query(query),
 		)
 
-		query = (
-			'select locate(".io", "frappe.io"), locate("3", cast(3 as varchar)), locate("3", 3::varchar)'
-		)
+		query = 'select locate(".io", "frappe.io"), locate("3", cast(3 as varchar)), locate("3", 3::varchar)'
 		self.assertEqual(
 			'select strpos( "frappe.io", ".io"), strpos( cast(3 as varchar), "3"), strpos( 3::varchar, "3")',
 			modify_query(query),
@@ -573,7 +602,6 @@ class TestDB(FrappeTestCase):
 		)
 
 	def test_callbacks(self):
-
 		order_of_execution = []
 
 		def f(val):
@@ -603,6 +631,9 @@ class TestDB(FrappeTestCase):
 		frappe.db.rollback()
 
 		self.assertEqual(order_of_execution, list(range(0, 9)))
+
+	def test_db_explain(self):
+		frappe.db.sql("select 1", debug=1, explain=1)
 
 
 @run_only_if(db_type_is.MARIADB)
@@ -730,9 +761,7 @@ class TestDBSetValue(FrappeTestCase):
 		self.assertEqual(status, updated_status)
 
 	def test_update_multiple_rows_single_column(self):
-		frappe.db.set_value(
-			"ToDo", {"description": ("like", "%test_set_value%")}, "description", "change 2"
-		)
+		frappe.db.set_value("ToDo", {"description": ("like", "%test_set_value%")}, "description", "change 2")
 
 		self.assertEqual(frappe.db.get_value("ToDo", self.todo1.name, "description"), "change 2")
 		self.assertEqual(frappe.db.get_value("ToDo", self.todo2.name, "description"), "change 2")
@@ -968,3 +997,85 @@ class TestReplicaConnections(FrappeTestCase):
 
 			outer()
 			self.assertEqual(write_connection, db_id())
+
+
+class TestConcurrency(FrappeTestCase):
+	@timeout(5, "There shouldn't be any lock wait")
+	def test_skip_locking(self):
+		with self.primary_connection():
+			name = frappe.db.get_value("User", "Administrator", for_update=True, skip_locked=True)
+			self.assertEqual(name, "Administrator")
+
+		with self.secondary_connection():
+			name = frappe.db.get_value("User", "Administrator", for_update=True, skip_locked=True)
+			self.assertFalse(name)
+
+	@timeout(5, "Lock timeout should have been 0")
+	def test_no_wait(self):
+		with self.primary_connection():
+			name = frappe.db.get_value("User", "Administrator", for_update=True)
+			self.assertEqual(name, "Administrator")
+
+		with self.secondary_connection():
+			self.assertRaises(
+				frappe.QueryTimeoutError,
+				lambda: frappe.db.get_value("User", "Administrator", for_update=True, wait=False),
+			)
+
+	@timeout(5, "Deletion stuck on lock timeout")
+	def test_delete_race_condition(self):
+		note = frappe.new_doc("Note")
+		note.title = note.content = frappe.generate_hash()
+		note.insert()
+		frappe.db.commit()  # ensure that second connection can see the document
+
+		with self.primary_connection():
+			n1 = frappe.get_doc(note.doctype, note.name)
+			n1.save()
+
+		with self.secondary_connection():
+			self.assertRaises(frappe.QueryTimeoutError, frappe.delete_doc, note.doctype, note.name)
+
+
+def bad_hook(*args, **kwargs):
+	frappe.db.commit()
+	frappe.db.rollback()
+
+
+def bad_nested_hook(doc, *args, **kwargs):
+	doc.run_method("before_validate")
+	frappe.db.commit()
+	frappe.db.rollback()
+
+
+class TestSqlIterator(FrappeTestCase):
+	def test_db_sql_iterator(self):
+		test_queries = [
+			"select * from `tabCountry` order by name",
+			"select code from `tabCountry` order by name",
+			"select code from `tabCountry` order by name limit 5",
+		]
+
+		for query in test_queries:
+			self.assertEqual(
+				frappe.db.sql(query, as_dict=True),
+				list(frappe.db.sql(query, as_dict=True, as_iterator=True)),
+				msg=f"{query=} results not same as iterator",
+			)
+
+			self.assertEqual(
+				frappe.db.sql(query, pluck=True),
+				list(frappe.db.sql(query, pluck=True, as_iterator=True)),
+				msg=f"{query=} results not same as iterator",
+			)
+
+			self.assertEqual(
+				frappe.db.sql(query, as_list=True),
+				list(frappe.db.sql(query, as_list=True, as_iterator=True)),
+				msg=f"{query=} results not same as iterator",
+			)
+
+	@run_only_if(db_type_is.MARIADB)
+	def test_unbuffered_cursor(self):
+		with frappe.db.unbuffered_cursor():
+			self.test_db_sql_iterator()

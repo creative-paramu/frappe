@@ -91,7 +91,7 @@ frappe.ui.Dialog = class Dialog extends frappe.ui.FieldGroup {
 				me.is_minimized = false;
 				me.hide_scrollbar(false);
 				// hide any grid row form if open
-				frappe.ui.form.get_open_grid_form()?.hide_form();
+				frappe.ui.form.get_open_grid_form?.()?.hide_form();
 
 				if (frappe.ui.open_dialogs[frappe.ui.open_dialogs.length - 1] === me) {
 					frappe.ui.open_dialogs.pop();
@@ -125,6 +125,10 @@ frappe.ui.Dialog = class Dialog extends frappe.ui.FieldGroup {
 					$input.blur();
 				}
 			});
+	}
+
+	get $backdrop() {
+		return $(this.$wrapper.data("bs.modal")?._backdrop);
 	}
 
 	set_modal_size() {
@@ -180,11 +184,9 @@ frappe.ui.Dialog = class Dialog extends frappe.ui.FieldGroup {
 		this.footer.removeClass("hide");
 		this.has_primary_action = true;
 		var me = this;
-		return this.get_primary_btn()
-			.removeClass("hide")
-			.html(label)
-			.off("click")
-			.on("click", function () {
+		const primary_btn = this.get_primary_btn().removeClass("hide").html(label);
+		if (typeof click == "function") {
+			primary_btn.off("click").on("click", function () {
 				me.primary_action_fulfilled = true;
 				// get values and send it
 				// as first parameter to click callback
@@ -193,6 +195,8 @@ frappe.ui.Dialog = class Dialog extends frappe.ui.FieldGroup {
 				if (!values) return;
 				click && click.apply(me, [values]);
 			});
+		}
+		return primary_btn;
 	}
 
 	set_secondary_action(click) {
@@ -241,7 +245,7 @@ frappe.ui.Dialog = class Dialog extends frappe.ui.FieldGroup {
 		this.$wrapper.removeClass("modal-minimize");
 
 		if (this.minimizable && this.is_minimized) {
-			$(".modal-backdrop").toggle();
+			this.$backdrop.show();
 			this.is_minimized = false;
 		}
 
@@ -254,6 +258,10 @@ frappe.ui.Dialog = class Dialog extends frappe.ui.FieldGroup {
 	}
 
 	hide() {
+		if (this.animate && this.animation_speed === "slow") {
+			this.$wrapper.addClass("slow");
+			this.$backdrop.addClass("slow");
+		}
 		this.$wrapper.modal("hide");
 		this.is_visible = false;
 	}
@@ -275,7 +283,7 @@ frappe.ui.Dialog = class Dialog extends frappe.ui.FieldGroup {
 	}
 
 	toggle_minimize() {
-		$(".modal-backdrop").toggle();
+		this.$backdrop.toggle();
 		let modal = this.$wrapper.closest(".modal").toggleClass("modal-minimize");
 		modal.attr("tabindex") ? modal.removeAttr("tabindex") : modal.attr("tabindex", -1);
 		this.is_minimized = !this.is_minimized;

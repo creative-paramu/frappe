@@ -21,7 +21,12 @@ frappe.ui.form.on("Contact", {
 			}
 		}
 
-		if (!frm.doc.user && !frm.is_new() && frm.perm[0].write) {
+		if (
+			!frm.doc.user &&
+			!frm.is_new() &&
+			frm.perm[0].write &&
+			frappe.boot.user.can_create.includes("User")
+		) {
 			frm.add_custom_button(__("Invite as User"), function () {
 				return frappe.call({
 					method: "frappe.contacts.doctype.contact.contact.invite_user",
@@ -82,6 +87,17 @@ frappe.ui.form.on("Contact", {
 					__("Links")
 				);
 			}
+		}
+
+		if (!frm.is_dirty()) {
+			frm.page.add_menu_item(__("Download vCard"), function () {
+				window.open(
+					`/api/method/frappe.contacts.doctype.contact.contact.download_vcard?contact=${encodeURIComponent(
+						frm.doc.name
+					)}`,
+					"_blank"
+				);
+			});
 		}
 	},
 	validate: function (frm) {

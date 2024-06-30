@@ -152,7 +152,7 @@ frappe.views.ListGroupBy = class ListGroupBy {
 			fieldtype: "MultiCheck",
 			columns: 2,
 			options: fields.map((df) => ({
-				label: __(df.label),
+				label: __(df.label, null, df.parent),
 				value: df.fieldname,
 				checked: this.group_by_fields.includes(df.fieldname),
 			})),
@@ -221,6 +221,8 @@ frappe.views.ListGroupBy = class ListGroupBy {
 			label = __("Me");
 		} else if (fieldtype && fieldtype == "Check") {
 			label = field.name == "0" ? __("No") : __("Yes");
+		} else if (fieldtype && fieldtype == "Link" && field.title) {
+			label = __(field.title);
 		} else {
 			label = __(field.name);
 		}

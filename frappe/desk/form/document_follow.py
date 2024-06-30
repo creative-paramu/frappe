@@ -10,7 +10,7 @@ from frappe.utils import get_url_to_form
 
 
 @frappe.whitelist()
-def update_follow(doctype, doc_name, following):
+def update_follow(doctype: str, doc_name: str, following: bool):
 	if following:
 		return follow_document(doctype, doc_name, frappe.session.user)
 	else:
@@ -141,7 +141,9 @@ def get_message_for_user(frequency, user):
 				{
 					"reference_docname": document_follow.ref_docname,
 					"reference_doctype": document_follow.ref_doctype,
-					"reference_url": get_url_to_form(document_follow.ref_doctype, document_follow.ref_docname),
+					"reference_url": get_url_to_form(
+						document_follow.ref_doctype, document_follow.ref_docname
+					),
 				}
 			)
 	return message, valid_document_follows
@@ -154,7 +156,7 @@ def get_document_followed_by_user(user):
 		frappe.qb.from_(DocumentFollow)
 		.where(DocumentFollow.user == user)
 		.select(DocumentFollow.ref_doctype, DocumentFollow.ref_docname)
-		.orderby(DocumentFollow.modified)
+		.orderby(DocumentFollow.creation)
 		.limit(20)
 	).run(as_dict=True)
 

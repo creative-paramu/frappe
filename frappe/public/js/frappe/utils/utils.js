@@ -54,6 +54,13 @@ String.prototype.plural = function (revert) {
 		"(octop)us$": "$1i",
 		"(ax|test)is$": "$1es",
 		"(us)$": "$1es",
+		"(f)oot$": "$1eet",
+		"(g)oose$": "$1eese",
+		"(sex)$": "$1es",
+		"(child)$": "$1ren",
+		"(m)an$": "$1en",
+		"(t)ooth$": "$1eeth",
+		"(pe)rson$": "$1ople",
 		"([^s]+)$": "$1s",
 	};
 
@@ -85,18 +92,14 @@ String.prototype.plural = function (revert) {
 		"(h|bl)ouses$": "$1ouse",
 		"(corpse)s$": "$1",
 		"(us)es$": "$1",
+		"(f)eet$": "$1oot",
+		"(g)eese$": "$1oose",
+		"(sex)es$": "$1",
+		"(child)ren$": "$1",
+		"(m)en$": "$1an",
+		"(t)eeth$": "$1ooth",
+		"(pe)ople$": "$1rson",
 		s$: "",
-	};
-
-	const irregular = {
-		move: "moves",
-		foot: "feet",
-		goose: "geese",
-		sex: "sexes",
-		child: "children",
-		man: "men",
-		tooth: "teeth",
-		person: "people",
 	};
 
 	const uncountable = [
@@ -115,29 +118,12 @@ String.prototype.plural = function (revert) {
 	// save some time in the case that singular and plural are the same
 	if (uncountable.indexOf(this.toLowerCase()) >= 0) return this;
 
-	// check for irregular forms
-	let word;
-	let pattern;
-	let replace;
-	for (word in irregular) {
-		if (revert) {
-			pattern = new RegExp(irregular[word] + "$", "i");
-			replace = word;
-		} else {
-			pattern = new RegExp(word + "$", "i");
-			replace = irregular[word];
-		}
-		if (pattern.test(this)) return this.replace(pattern, replace);
-	}
-
-	let array;
-	if (revert) array = singular;
-	else array = plural;
-
 	// check for matches using regular expressions
+	const array = revert ? singular : plural;
+
 	let reg;
 	for (reg in array) {
-		pattern = new RegExp(reg, "i");
+		const pattern = new RegExp(reg, "i");
 
 		if (pattern.test(this)) return this.replace(pattern, array[reg]);
 	}
@@ -494,6 +480,7 @@ Object.assign(frappe.utils, {
 		var style = default_style || "default";
 		var colour = "gray";
 		if (text) {
+			text = cstr(text);
 			if (has_words(["Pending", "Review", "Medium", "Not Approved"], text)) {
 				style = "warning";
 				colour = "orange";
@@ -1186,6 +1173,8 @@ Object.assign(frappe.utils, {
 	get_number_system: function (country) {
 		if (["Bangladesh", "India", "Myanmar", "Pakistan"].includes(country)) {
 			return number_systems.indian;
+		} else if (country == "Nepal") {
+			return number_systems.nepalese;
 		} else {
 			return number_systems.default;
 		}
@@ -1218,7 +1207,7 @@ Object.assign(frappe.utils, {
 					? "es-icon es-solid"
 					: "es-icon es-line"
 				: "icon"
-		} ${svg_class} ${size_class}" style="${icon_style}">
+		} ${svg_class} ${size_class}" style="${icon_style}" aria-hidden="true">
 			<use class="${icon_class}" href="${icon_name}"></use>
 		</svg>`;
 	},
@@ -1300,6 +1289,9 @@ Object.assign(frappe.utils, {
 								route += `/${item.kanban_board}`;
 							}
 							break;
+						case "Image":
+							route = `${doctype_slug}/view/image`;
+							break;
 						default:
 							route = doctype_slug;
 					}
@@ -1308,7 +1300,7 @@ Object.assign(frappe.utils, {
 				if (item.is_query_report) {
 					route = "query-report/" + item.name;
 				} else if (!item.doctype) {
-					route = "/report/" + item.name;
+					route = "report/" + item.name;
 				} else {
 					route = frappe.router.slug(item.doctype) + "/view/report/" + item.name;
 				}
@@ -1347,10 +1339,19 @@ Object.assign(frappe.utils, {
 
 		// return number if total digits is lesser than min_length
 		const len = String(number).match(/\d/g).length;
-		if (len < min_length) return number.toString();
+		if (len < min_length) {
+			return number.toString();
+		}
 
 		const number_system = this.get_number_system(country);
 		let x = Math.abs(Math.round(number));
+
+		// if rounding was sufficient to get below min_length, return the rounded number
+		const x_string = x.toString();
+		if (x_string.length < min_length) {
+			return x_string;
+		}
+
 		for (const map of number_system) {
 			if (x >= map.divisor) {
 				let result = number / map.divisor;
@@ -1554,6 +1555,9 @@ Object.assign(frappe.utils, {
 	},
 
 	fetch_link_title(doctype, name) {
+		if (!doctype || !name) {
+			return;
+		}
 		try {
 			return frappe
 				.xcall("frappe.desk.search.get_link_title", {
@@ -1574,7 +1578,7 @@ Object.assign(frappe.utils, {
 	only_allow_num_decimal(input) {
 		input.on("input", (e) => {
 			let self = $(e.target);
-			self.val(self.val().replace(/[^0-9.]/g, ""));
+			self.val(self.val().replace(/[^0-9.\-]/g, ""));
 			if (
 				(e.which != 46 || self.val().indexOf(".") != -1) &&
 				(e.which < 48 || e.which > 57)
@@ -1710,6 +1714,8 @@ Object.assign(frappe.utils, {
 					fieldname: "source",
 					label: __("Source"),
 					fieldtype: "Data",
+					reqd: 1,
+					description: "The referrer (e.g. google, newsletter)",
 					default: localStorage.getItem("tracker_url:source"),
 				},
 				{
@@ -1724,24 +1730,34 @@ Object.assign(frappe.utils, {
 					fieldname: "medium",
 					label: __("Medium"),
 					fieldtype: "Data",
+					description: "Marketing medium (e.g. cpc, banner, email)",
 					default: localStorage.getItem("tracker_url:medium"),
+				},
+				{
+					fieldname: "content",
+					label: __("Content"),
+					fieldtype: "Data",
+					description: "Use to differentiate ad variants (e.g. A/B testing)",
+					default: localStorage.getItem("tracker_url:content"),
 				},
 			],
 			function (data) {
 				let url = data.url;
 				localStorage.setItem("tracker_url:url", data.url);
 
-				if (data.source) {
-					url += "?source=" + data.source;
-					localStorage.setItem("tracker_url:source", data.source);
-				}
+				url += "?utm_source=" + encodeURIComponent(data.source);
+				localStorage.setItem("tracker_url:source", data.source);
 				if (data.campaign) {
-					url += "&campaign=" + data.campaign;
+					url += "&utm_campaign=" + encodeURIComponent(data.campaign);
 					localStorage.setItem("tracker_url:campaign", data.campaign);
 				}
 				if (data.medium) {
-					url += "&medium=" + data.medium.toLowerCase();
+					url += "&utm_medium=" + encodeURIComponent(data.medium);
 					localStorage.setItem("tracker_url:medium", data.medium);
+				}
+				if (data.medium) {
+					url += "&utm_content=" + encodeURIComponent(data.content);
+					localStorage.setItem("tracker_url:content", data.content);
 				}
 
 				frappe.utils.copy_to_clipboard(url);

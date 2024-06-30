@@ -2,11 +2,11 @@
 	<button
 		ref="add_field_btn_ref"
 		class="add-field-btn btn btn-xs btn-icon"
-		:title="__('Add field')"
+		:title="tooltip"
 		@click.stop="toggle_fieldtype_options"
 	>
 		<slot>
-			{{ __("Add a field") }}
+			{{ __("Add field") }}
 		</slot>
 		<Teleport to="#autocomplete-area">
 			<div class="autocomplete" ref="autocomplete_ref">
@@ -16,7 +16,7 @@
 						:value="autocomplete_value"
 						:options="fields"
 						@change="add_new_field"
-						placeholder="Search fieldtypes..."
+						:placeholder="__('Search fieldtypes...')"
 					/>
 				</div>
 			</div>
@@ -43,6 +43,10 @@ const props = defineProps({
 		type: Object,
 		default: null,
 	},
+	tooltip: {
+		type: String,
+		default: __("Add field"),
+	},
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -63,7 +67,7 @@ const fields = computed(() => {
 			return true;
 		})
 		.map((df) => {
-			let out = { label: df };
+			let out = { label: __(df), value: df };
 			return out;
 		});
 	return [...fields];
@@ -100,7 +104,7 @@ function toggle_fieldtype_options() {
 }
 
 function add_new_field(field) {
-	fieldtype = field?.label;
+	fieldtype = field?.value;
 
 	if (!fieldtype) return;
 

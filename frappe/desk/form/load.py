@@ -212,9 +212,7 @@ def get_communications(doctype, name, start=0, limit=20):
 	return _get_communications(doctype, name, cint(start), cint(limit))
 
 
-def get_comments(
-	doctype: str, name: str, comment_type: str | list[str] = "Comment"
-) -> list[frappe._dict]:
+def get_comments(doctype: str, name: str, comment_type: str | list[str] = "Comment") -> list[frappe._dict]:
 	if isinstance(comment_type, list):
 		comment_types = comment_type
 
@@ -259,7 +257,7 @@ def get_point_logs(doctype, docname):
 def _get_communications(doctype, name, start=0, limit=20):
 	communications = get_communication_data(doctype, name, start, limit)
 	for c in communications:
-		if c.communication_type == "Communication":
+		if c.communication_type in ("Communication", "Automated Message"):
 			c.attachments = json.dumps(
 				frappe.get_all(
 					"File",
@@ -274,7 +272,7 @@ def _get_communications(doctype, name, start=0, limit=20):
 def get_communication_data(
 	doctype, name, start=0, limit=20, after=None, fields=None, group_by=None, as_dict=True
 ):
-	"""Returns list of communications for a given document"""
+	"""Return list of communications for a given document."""
 	if not fields:
 		fields = """
 			C.name, C.communication_type, C.communication_medium,
@@ -288,11 +286,9 @@ def get_communication_data(
 	conditions = ""
 	if after:
 		# find after a particular date
-		conditions += """
-			AND C.creation > {}
-		""".format(
-			after
-		)
+		conditions += f"""
+			AND C.communication_date > {after}
+		"""
 
 	if doctype == "User":
 		conditions += """
@@ -300,39 +296,33 @@ def get_communication_data(
 		"""
 
 	# communications linked to reference_doctype
-	part1 = """
+	part1 = f"""
 		SELECT {fields}
 		FROM `tabCommunication` as C
 		WHERE C.communication_type IN ('Communication', 'Feedback', 'Automated Message')
 		AND (C.reference_doctype = %(doctype)s AND C.reference_name = %(name)s)
 		{conditions}
-	""".format(
-		fields=fields, conditions=conditions
-	)
+	"""
 
 	# communications linked in Timeline Links
-	part2 = """
+	part2 = f"""
 		SELECT {fields}
 		FROM `tabCommunication` as C
 		INNER JOIN `tabCommunication Link` ON C.name=`tabCommunication Link`.parent
 		WHERE C.communication_type IN ('Communication', 'Feedback', 'Automated Message')
 		AND `tabCommunication Link`.link_doctype = %(doctype)s AND `tabCommunication Link`.link_name = %(name)s
 		{conditions}
-	""".format(
-		fields=fields, conditions=conditions
-	)
+	"""
 
 	return frappe.db.sql(
 		"""
 		SELECT *
 		FROM (({part1}) UNION ({part2})) AS combined
 		{group_by}
-		ORDER BY creation DESC
+		ORDER BY communication_date DESC
 		LIMIT %(limit)s
 		OFFSET %(start)s
-	""".format(
-			part1=part1, part2=part2, group_by=(group_by or "")
-		),
+	""".format(part1=part1, part2=part2, group_by=(group_by or "")),
 		dict(
 			doctype=doctype,
 			name=name,
@@ -437,7 +427,7 @@ def get_title_values_for_link_and_dynamic_link_fields(doc, link_fields=None):
 		doctype = field.options if field.fieldtype == "Link" else doc.get(field.options)
 
 		meta = frappe.get_meta(doctype)
-		if not meta or not (meta.title_field and meta.show_title_field_in_link):
+		if not meta or not meta.title_field or not meta.show_title_field_in_link:
 			continue
 
 		link_title = frappe.db.get_value(

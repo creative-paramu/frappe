@@ -23,10 +23,10 @@
 
 	.dt-cell {
 		color: var(--text-color) !important;
-		background-color: var(--bg-color) !important;
 	}
 
-	.frappe-control, .form-control {
+	.frappe-control,
+	.form-control {
 		margin: 0;
 		border-radius: 0px;
 		border: none;
@@ -48,7 +48,6 @@
 	}
 
 	.dt-header {
-
 		.dt-row[data-is-filter] {
 			display: flex !important;
 		}
@@ -150,7 +149,8 @@
 		font-feature-settings: "tnum";
 	}
 
-	.dt-cell__content--header-0, .dt-cell__content--col-0 {
+	.dt-cell__content--header-0,
+	.dt-cell__content--col-0 {
 		padding: 0.5rem;
 	}
 

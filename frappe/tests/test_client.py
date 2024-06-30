@@ -9,7 +9,7 @@ from frappe.utils import get_site_url
 
 class TestClient(FrappeTestCase):
 	def test_set_value(self):
-		todo = frappe.get_doc(dict(doctype="ToDo", description="test")).insert()
+		todo = frappe.get_doc(doctype="ToDo", description="test").insert()
 		frappe.set_value("ToDo", todo.name, "description", "test 1")
 		self.assertEqual(frappe.get_value("ToDo", todo.name, "description"), "test 1")
 
@@ -144,7 +144,6 @@ class TestClient(FrappeTestCase):
 		first_item = data["message"][0]
 		self.assertTrue("name" in first_item)
 		self.assertTrue("modified" in first_item)
-		frappe.local.login_manager.logout()
 
 	def test_client_get(self):
 		from frappe.client import get

@@ -68,6 +68,7 @@
   "column_break_51",
   "email_append_to",
   "sender_field",
+  "sender_name_field",
   "subject_field",
   "sb2",
   "permissions",
@@ -332,7 +333,7 @@
    "label": "Default Print Format"
   },
   {
-   "default": "modified",
+   "default": "creation",
    "depends_on": "eval:!doc.istable",
    "fieldname": "sort_field",
    "fieldtype": "Data",
@@ -520,7 +521,7 @@
    "depends_on": "email_append_to",
    "fieldname": "sender_field",
    "fieldtype": "Data",
-   "label": "Sender Field",
+   "label": "Sender Email Field",
    "mandatory_depends_on": "email_append_to"
   },
   {
@@ -569,7 +570,7 @@
    "fieldtype": "Select",
    "label": "Naming Rule",
    "length": 40,
-   "options": "\nSet by user\nAutoincrement\nBy fieldname\nBy \"Naming Series\" field\nExpression\nExpression (old style)\nRandom\nBy script"
+   "options": "\nSet by user\nAutoincrement\nBy fieldname\nBy \"Naming Series\" field\nExpression\nExpression (old style)\nRandom\nUUID\nBy script"
   },
   {
    "fieldname": "migration_hash",
@@ -661,6 +662,12 @@
    "fieldtype": "Tab Break",
    "label": "Connections",
    "show_dashboard": 1
+  },
+  {
+   "depends_on": "email_append_to",
+   "fieldname": "sender_name_field",
+   "fieldtype": "Data",
+   "label": "Sender Name Field"
   }
  ],
  "icon": "fa fa-bolt",
@@ -743,7 +750,7 @@
    "link_fieldname": "reference_doctype"
   }
  ],
- "modified": "2023-11-01 16:45:14.960949",
+ "modified": "2024-03-29 16:09:26.114720",
  "modified_by": "Administrator",
  "module": "Core",
  "name": "DocType",
@@ -775,7 +782,7 @@
  "route": "doctype",
  "search_fields": "module",
  "show_name_in_global_search": 1,
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
  "track_changes": 1,

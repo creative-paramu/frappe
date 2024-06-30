@@ -26,7 +26,7 @@ let docfield_df = computed(() => {
 		}
 
 		if (
-			in_list(["fetch_from", "fetch_if_empty"], df.fieldname) &&
+			["fetch_from", "fetch_if_empty"].includes(df.fieldname) &&
 			in_list(frappe.model.no_value_type, store.form.selected_field.fieldtype)
 		) {
 			return false;
@@ -41,7 +41,7 @@ let docfield_df = computed(() => {
 			df.options = "";
 			args.value = {};
 
-			if (in_list(["Table", "Link"], store.form.selected_field.fieldtype)) {
+			if (["Table", "Link"].includes(store.form.selected_field.fieldtype)) {
 				df.fieldtype = "Link";
 				df.options = "DocType";
 
@@ -49,6 +49,11 @@ let docfield_df = computed(() => {
 					args.value.is_table_field = 1;
 				}
 			}
+		}
+
+		// show link_filters docfield only when link field is selected
+		if (df.fieldname === "link_filters" && store.form.selected_field.fieldtype !== "Link") {
+			return false;
 		}
 
 		if (search_text.value) {
@@ -62,7 +67,6 @@ let docfield_df = computed(() => {
 		}
 		return true;
 	});
-
 	return [...fields];
 });
 </script>
@@ -82,7 +86,7 @@ let docfield_df = computed(() => {
 		<div v-if="store.form.selected_field">
 			<div class="field" v-for="(df, i) in docfield_df" :key="i">
 				<component
-					:is="df.fieldtype.replace(' ', '') + 'Control'"
+					:is="df.fieldtype.replaceAll(' ', '') + 'Control'"
 					:args="args"
 					:df="df"
 					:read_only="store.read_only"

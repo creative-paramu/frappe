@@ -27,8 +27,8 @@ class TestEmailQueue(FrappeTestCase):
 			}
 		).insert()
 
-		old_record.modified = "2010-01-01 00:00:01"
-		old_record.recipients[0].modified = old_record.modified
+		old_record.creation = "2010-01-01 00:00:01"
+		old_record.recipients[0].creation = old_record.creation
 		old_record.db_update_all()
 
 		new_record = frappe.copy_doc(old_record)
@@ -78,3 +78,18 @@ class TestEmailQueue(FrappeTestCase):
 			{"subject": f"Failed to send email with subject: {subject}"},
 		)
 		self.assertTrue(notification_log)
+
+	def test_perf_reusing_smtp_server(self):
+		"""Ensure that same smtpserver instance is being returned when retrieved multiple times."""
+
+		self.assertTrue(frappe.new_doc("Email Queue").get_email_account()._from_site_config)
+
+		def get_server(q):
+			return q.get_email_account().get_smtp_server()
+
+		self.assertIs(get_server(frappe.new_doc("Email Queue")), get_server(frappe.new_doc("Email Queue")))
+
+		q1 = frappe.new_doc("Email Queue", email_account="_Test Email Account 1")
+		q2 = frappe.new_doc("Email Queue", email_account="_Test Email Account 1")
+		self.assertIsNot(get_server(frappe.new_doc("Email Queue")), get_server(q1))
+		self.assertIs(get_server(q1), get_server(q2))

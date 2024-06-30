@@ -36,6 +36,7 @@
   "send_to_all_assignees",
   "recipients",
   "message_sb",
+  "message_type",
   "message",
   "message_examples",
   "view_properties",
@@ -230,7 +231,8 @@
    "fieldname": "message",
    "fieldtype": "Code",
    "ignore_xss_filter": 1,
-   "label": "Message"
+   "label": "Message",
+   "options": "Jinja"
   },
   {
    "fieldname": "message_examples",
@@ -277,15 +279,24 @@
    "fieldname": "send_to_all_assignees",
    "fieldtype": "Check",
    "label": "Send To All Assignees"
+  },
+  {
+   "default": "Markdown",
+   "depends_on": "is_standard",
+   "fieldname": "message_type",
+   "fieldtype": "Select",
+   "label": "Message Type",
+   "options": "Markdown\nHTML\nPlain Text"
   }
  ],
  "icon": "fa fa-envelope",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2021-05-04 11:17:11.882314",
+ "modified": "2024-06-17 04:03:22.591781",
  "modified_by": "Administrator",
  "module": "Email",
  "name": "Notification",
+ "naming_rule": "Set by user",
  "owner": "Administrator",
  "permissions": [
   {
@@ -299,8 +310,9 @@
    "write": 1
   }
  ],
- "sort_field": "modified",
+ "sort_field": "creation",
  "sort_order": "DESC",
+ "states": [],
  "title_field": "subject",
  "track_changes": 1
 }

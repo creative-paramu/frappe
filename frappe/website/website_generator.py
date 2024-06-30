@@ -30,9 +30,7 @@ class WebsiteGenerator(Document):
 			self.name = self.scrubbed_title()
 
 	def onload(self):
-		self.get("__onload").update(
-			{"is_website_generator": True, "published": self.is_website_published()}
-		)
+		self.get("__onload").update({"is_website_generator": True, "published": self.is_website_published()})
 
 	def validate(self):
 		self.set_route()
@@ -45,8 +43,7 @@ class WebsiteGenerator(Document):
 			self.route = self.route.strip("/.")[:139]
 
 	def make_route(self):
-		"""Returns the default route. If `route` is specified in DocType it will be
-		route/title"""
+		"""Return the default route. If `route` is specified in DocType it will be route/title."""
 		from_title = self.scrubbed_title()
 		if self.meta.route:
 			return self.meta.route + "/" + from_title
@@ -98,8 +95,8 @@ class WebsiteGenerator(Document):
 
 	def is_website_published(self):
 		"""Return true if published in website"""
-		if self.get_condition_field():
-			return self.get(self.get_condition_field()) and True or False
+		if condition_field := self.get_condition_field():
+			return self.get(condition_field) or False
 		else:
 			return True
 
@@ -141,7 +138,6 @@ class WebsiteGenerator(Document):
 			and self.is_website_published()
 			and self.meta.allow_guest_to_view
 		):
-
 			url = frappe.utils.get_url(self.route)
 			frappe.enqueue(
 				"frappe.website.doctype.website_settings.google_indexing.publish_site",

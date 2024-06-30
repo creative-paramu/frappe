@@ -30,7 +30,7 @@ const label_input = ref(null);
 const hovered = ref(false);
 const selected = computed(() => store.selected(props.field.df.name));
 const component = computed(() => {
-	return props.field.df.fieldtype.replace(" ", "") + "Control";
+	return props.field.df.fieldtype.replaceAll(" ", "") + "Control";
 });
 
 function remove_field() {
@@ -75,6 +75,113 @@ function duplicate_field() {
 	store.form.selected_field = duplicate_field.df;
 }
 
+function make_dialog(frm) {
+	frm.dialog = new frappe.ui.Dialog({
+		title: __("Set Filters"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "filter_area",
+			},
+		],
+		primary_action: () => {
+			let fieldname = props.field.df.fieldname;
+			let field_option = props.field.df.options;
+			let filters = frm.filter_group.get_filters().map((filter) => {
+				// last element is a boolean which hides the filter hence not required to store in meta
+				filter.pop();
+
+				// filter_group component requires options and frm.set_query requires fieldname so storing both
+				filter[0] = field_option;
+				return filter;
+			});
+
+			props.field.df.link_filters = JSON.stringify(filters);
+			store.form.selected_field = props.field.df;
+			frm.dialog.hide();
+		},
+		primary_action_label: __("Apply"),
+	});
+
+	if (frm.doctype === "Customize Form") {
+		let current_doctype = frm.doc.doc_type;
+		let fieldname = props.field.df.fieldname;
+		let property = "link_filters";
+		let property_setter_id = current_doctype + "-" + fieldname + "-" + property;
+
+		frappe.db.exists("Property Setter", property_setter_id).then((exits) => {
+			if (exits) {
+				frm.dialog.set_secondary_action_label(__("Reset To Default"));
+				frm.dialog.set_secondary_action(() => {
+					frappe.call({
+						method: "frappe.custom.doctype.customize_form.customize_form.get_link_filters_from_doc_without_customisations",
+						args: {
+							doctype: current_doctype,
+							fieldname: fieldname,
+						},
+						callback: function (r) {
+							if (r.message) {
+								props.field.df.link_filters = r.message;
+
+								frm.filter_group.clear_filters();
+								add_existing_filter(frm, props.field.df);
+								// hide the secondary action button
+								frm.dialog.get_secondary_btn().addClass("hidden");
+							}
+						},
+					});
+				});
+			}
+		});
+	}
+}
+
+function make_filter_area(frm, doctype) {
+	frm.filter_group = new frappe.ui.FilterGroup({
+		parent: frm.dialog.get_field("filter_area").$wrapper,
+		doctype: doctype,
+		on_change: () => {},
+	});
+}
+
+function add_existing_filter(frm, df) {
+	if (df.link_filters) {
+		let filters = JSON.parse(df.link_filters);
+		if (filters) {
+			frm.filter_group.add_filters_to_filter_group(filters);
+		}
+	}
+}
+
+function edit_filters() {
+	let field_doctype = props.field.df.options;
+	const { frm } = store;
+
+	make_dialog(frm);
+	make_filter_area(frm, field_doctype);
+	frappe.model.with_doctype(field_doctype, () => {
+		frm.dialog.show();
+		add_existing_filter(frm, props.field.df);
+	});
+}
+
+function is_filter_applied() {
+	if (props.field.df.link_filters) {
+		try {
+			if (JSON.parse(props.field.df.link_filters).length > 0) {
+				return "btn-filter-applied";
+			}
+		} catch (error) {
+			return "";
+		}
+	}
+}
+
+function open_child_doctype() {
+	if (!props.field?.df?.options) return;
+	window.open(`/app/doctype/${props.field.df.options}`, "_blank");
+}
+
 onMounted(() => selected.value && label_input.value.focus_on_label());
 </script>
 
@@ -89,6 +196,7 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 		<component
 			:is="component"
 			:df="field.df"
+			:is-customize-form="store.is_customize_form"
 			:data-fieldname="field.df.fieldname"
 			:data-fieldtype="field.df.fieldtype"
 		>
@@ -106,11 +214,19 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 						class="help-icon"
 						v-if="field.df.documentation_url"
 						v-html="frappe.utils.icon('help', 'sm')"
-					></div>
+					/>
 				</div>
 			</template>
 			<template #actions>
 				<div class="field-actions" :hidden="store.read_only">
+					<button
+						v-if="field.df.fieldtype === 'Link'"
+						class="btn btn-xs btn-icon"
+						:class="is_filter_applied()"
+						@click="edit_filters"
+					>
+						<div v-html="frappe.utils.icon('filter', 'sm')" />
+					</button>
 					<AddFieldButton ref="add_field_ref" :column="column" :field="field">
 						<div v-html="frappe.utils.icon('add', 'sm')" />
 					</AddFieldButton>
@@ -122,21 +238,29 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 						"
 						@click="move_fields_to_column"
 					>
-						<div v-html="frappe.utils.icon('move', 'sm')"></div>
+						<div v-html="frappe.utils.icon('move', 'sm')" />
 					</button>
 					<button
 						class="btn btn-xs btn-icon"
 						:title="__('Duplicate field')"
 						@click.stop="duplicate_field"
 					>
-						<div v-html="frappe.utils.icon('duplicate', 'sm')"></div>
+						<div v-html="frappe.utils.icon('duplicate', 'sm')" />
+					</button>
+					<button
+						v-if="field.df.fieldtype === 'Table' && field.df.options"
+						class="btn btn-xs btn-icon"
+						@click="open_child_doctype"
+						:title="__('Edit the {0} Doctype', [field.df.options])"
+					>
+						<div v-html="frappe.utils.icon('external-link', 'sm')" />
 					</button>
 					<button
 						class="btn btn-xs btn-icon"
 						:title="__('Remove field')"
 						@click.stop="remove_field"
 					>
-						<div v-html="frappe.utils.icon('remove', 'sm')"></div>
+						<div v-html="frappe.utils.icon('remove', 'sm')" />
 					</button>
 				</div>
 			</template>
@@ -160,7 +284,7 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 
 	&.hovered,
 	&.selected {
-		border-color: var(--primary);
+		border-color: var(--border-primary);
 		.btn.btn-icon {
 			opacity: 1 !important;
 		}
@@ -203,6 +327,12 @@ onMounted(() => selected.value && label_input.value.focus_on_label());
 				}
 			}
 		}
+	}
+}
+.btn-filter-applied {
+	background-color: var(--gray-300) !important;
+	&:hover {
+		background-color: var(--gray-400) !important;
 	}
 }
 </style>
